@@ -1544,12 +1544,17 @@ def _save_aggregate(
                         tags={"call_made": True, "blocker": "none"},
                     )
                     try:
-                        # If the `projects:similarity-embeddings-grouping` feature is disabled,
-                        # we'll still get back result metadata, but `seer_matched_group` will be None
-                        seer_response_data, seer_matched_group = get_seer_similar_issues(
+                        # If no matching group is found in Seer, we'll still get back result
+                        # metadata, but `seer_matched_grouphash` will be None
+                        seer_response_data, seer_matched_grouphash = get_seer_similar_issues(
                             event, primary_hashes
                         )
                         event.data["seer_similarity"] = seer_response_data
+                        seer_matched_group = (
+                            Group.objects.filter(id=seer_matched_grouphash.group_id).first()
+                            if seer_matched_grouphash
+                            else None
+                        )
 
                     # Insurance - in theory we shouldn't ever land here
                     except Exception as e:
