@@ -33,6 +33,8 @@ seer_anomaly_detection_connection_pool = connection_from_url(
     timeout=settings.SEER_ANOMALY_DETECTION_TIMEOUT,
 )
 
+NOT_ENOUGH_DATA = "Fewer than seven days of historical data available"
+
 
 def format_historical_data(data: SnubaTSResult) -> list[TimeSeriesPoint]:
     """
@@ -152,11 +154,10 @@ def send_historical_data_to_seer(alert_rule: AlertRule, user: User) -> BaseHTTPR
         return base_error_response
 
     MIN_DAYS = 7
-    not_enough_data_text = "Fewer than seven days of historical data available"
     data_start_index, data_end_index = get_start_and_end(historical_data)
     if data_start_index == -1:
         resp.status = 202
-        resp.reason = not_enough_data_text
+        resp.reason = NOT_ENOUGH_DATA  # this reason value isn't read anywhere, but I think it's good to justify the 202
 
     data_start_time = datetime.fromtimestamp(
         historical_data.data.get("data")[data_start_index]["time"]
@@ -164,7 +165,7 @@ def send_historical_data_to_seer(alert_rule: AlertRule, user: User) -> BaseHTTPR
     data_end_time = datetime.fromtimestamp(historical_data.data.get("data")[data_end_index]["time"])
     if data_end_time - data_start_time < timedelta(days=MIN_DAYS):
         resp.status = 202
-        resp.reason = not_enough_data_text
+        resp.reason = NOT_ENOUGH_DATA
     return resp
 
 

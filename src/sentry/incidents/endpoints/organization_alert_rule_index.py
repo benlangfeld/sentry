@@ -46,7 +46,7 @@ from sentry.models.organizationmemberteam import OrganizationMemberTeam
 from sentry.models.project import Project
 from sentry.models.rule import Rule, RuleSource
 from sentry.models.team import Team
-from sentry.seer.anomaly_detection.store_data import send_historical_data_to_seer
+from sentry.seer.anomaly_detection.store_data import NOT_ENOUGH_DATA, send_historical_data_to_seer
 from sentry.sentry_apps.services.app import app_service
 from sentry.signals import alert_rule_created
 from sentry.snuba.dataset import Dataset
@@ -125,11 +125,11 @@ class AlertRuleIndexMixin(Endpoint):
                 alert_rule = serializer.save()
                 if alert_rule.detection_type == AlertRuleDetectionType.DYNAMIC.value:
                     resp = send_historical_data_to_seer(alert_rule=alert_rule, user=request.user)
-                    if resp.status == 202:
+                    if (
+                        resp.status == 202
+                    ):  # NOTE: send a 202 if we get a "not enough data" warning to relay this info to FE
                         http_status = 202
-                    elif (
-                        resp.status != 200
-                    ):  # NOTE: send a 202 if we get a "not enough data" warning
+                    elif resp.status != 200:
                         alert_rule.delete()
                         return Response({"detail": resp.reason}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -156,9 +156,8 @@ class AlertRuleIndexMixin(Endpoint):
                         serialize(alert_rule, request.user), status=status.HTTP_201_CREATED
                     )
                 else:
-                    not_enough_data_text = "Fewer than seven days of historical data available"  # TODO: make this a constant somewhere
                     response = Response(
-                        {**serialize(alert_rule, request.user), "reason": not_enough_data_text},
+                        {**serialize(alert_rule, request.user), "detail": NOT_ENOUGH_DATA},
                         status=status.HTTP_202_ACCEPTED,
                     )
                     return response

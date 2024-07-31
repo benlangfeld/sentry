@@ -30,7 +30,10 @@ from sentry.integrations.slack.utils.channel import SlackChannelIdData
 from sentry.models.auditlogentry import AuditLogEntry
 from sentry.models.organizationmember import OrganizationMember
 from sentry.models.outbox import outbox_context
-from sentry.seer.anomaly_detection.store_data import seer_anomaly_detection_connection_pool
+from sentry.seer.anomaly_detection.store_data import (
+    NOT_ENOUGH_DATA,
+    seer_anomaly_detection_connection_pool,
+)
 from sentry.sentry_metrics import indexer
 from sentry.sentry_metrics.use_case_id_registry import UseCaseID
 from sentry.silo.base import SiloMode
@@ -357,7 +360,7 @@ class AlertRuleCreateEndpointTest(AlertRuleIndexBase):
         alert_rule = AlertRule.objects.get(id=resp.data["id"])
         assert resp.data == {
             **serialize(alert_rule, self.user),
-            "reason": "Fewer than seven days of historical data available",
+            "detail": NOT_ENOUGH_DATA,
         }
         assert alert_rule.seasonality == resp.data.get("seasonality")
         assert alert_rule.sensitivity == resp.data.get("sensitivity")
