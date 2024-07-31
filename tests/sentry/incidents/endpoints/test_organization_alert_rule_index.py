@@ -229,13 +229,13 @@ class AlertRuleCreateEndpointTest(AlertRuleIndexBase):
             "seasonality": AlertRuleSeasonality.AUTO,
         }
         mock_seer_request.return_value = HTTPResponse(status=200)
-        day_ago = before_now(days=1).replace(hour=10, minute=0, second=0, microsecond=0)
+        two_weeks_ago = before_now(days=14).replace(hour=10, minute=0, second=0, microsecond=0)
         with self.options({"issues.group_attributes.send_kafka": True}):
             self.store_event(
                 data={
                     "event_id": "a" * 32,
                     "message": "super duper bad",
-                    "timestamp": iso_format(day_ago + timedelta(minutes=1)),
+                    "timestamp": iso_format(two_weeks_ago + timedelta(minutes=1)),
                     "fingerprint": ["group1"],
                     "tags": {"sentry:user": self.user.email},
                 },
@@ -246,7 +246,7 @@ class AlertRuleCreateEndpointTest(AlertRuleIndexBase):
                 data={
                     "event_id": "b" * 32,
                     "message": "super bad",
-                    "timestamp": iso_format(day_ago + timedelta(minutes=2)),
+                    "timestamp": iso_format(two_weeks_ago + timedelta(days=10)),
                     "fingerprint": ["group2"],
                     "tags": {"sentry:user": self.user.email},
                 },
@@ -307,6 +307,60 @@ class AlertRuleCreateEndpointTest(AlertRuleIndexBase):
         assert not AlertRule.objects.filter(detection_type=AlertRuleDetectionType.DYNAMIC).exists()
         assert mock_logger.warning.call_count == 1
         assert resp.data["detail"] == "Timeout error when hitting Seer store data endpoint"
+        assert mock_seer_request.call_count == 1
+
+    @with_feature("organizations:anomaly-detection-alerts")
+    @with_feature("organizations:incidents")
+    @patch(
+        "sentry.seer.anomaly_detection.store_data.seer_anomaly_detection_connection_pool.urlopen"
+    )
+    def test_anomaly_detection_alert_not_enough_data(self, mock_seer_request):
+        data = {
+            **self.alert_rule_dict,
+            "detection_type": AlertRuleDetectionType.DYNAMIC,
+            "sensitivity": AlertRuleSensitivity.LOW,
+            "seasonality": AlertRuleSeasonality.AUTO,
+        }
+        mock_seer_request.return_value = HTTPResponse(status=200)
+        day_ago = before_now(days=1).replace(hour=10, minute=0, second=0, microsecond=0)
+        with self.options({"issues.group_attributes.send_kafka": True}):
+            self.store_event(
+                data={
+                    "event_id": "a" * 32,
+                    "message": "super duper bad",
+                    "timestamp": iso_format(day_ago + timedelta(minutes=1)),
+                    "fingerprint": ["group1"],
+                    "tags": {"sentry:user": self.user.email},
+                },
+                event_type=EventType.ERROR,
+                project_id=self.project.id,
+            )
+            self.store_event(
+                data={
+                    "event_id": "b" * 32,
+                    "message": "super bad",
+                    "timestamp": iso_format(day_ago + timedelta(minutes=2)),
+                    "fingerprint": ["group2"],
+                    "tags": {"sentry:user": self.user.email},
+                },
+                event_type=EventType.ERROR,
+                project_id=self.project.id,
+            )
+
+        with outbox_runner():
+            resp = self.get_success_response(
+                self.organization.slug,
+                status_code=202,
+                **data,
+            )
+        assert "id" in resp.data
+        alert_rule = AlertRule.objects.get(id=resp.data["id"])
+        assert resp.data == {
+            **serialize(alert_rule, self.user),
+            "reason": "Fewer than seven days of historical data available",
+        }
+        assert alert_rule.seasonality == resp.data.get("seasonality")
+        assert alert_rule.sensitivity == resp.data.get("sensitivity")
         assert mock_seer_request.call_count == 1
 
     def test_monitor_type_with_condition(self):

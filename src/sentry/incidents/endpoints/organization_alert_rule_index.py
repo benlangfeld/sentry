@@ -121,11 +121,14 @@ class AlertRuleIndexMixin(Endpoint):
                 return Response({"uuid": client.uuid}, status=202)
                 # TODO handle slack channel lookup AND anomaly detection
             else:
+                http_status = 201
                 alert_rule = serializer.save()
                 if alert_rule.detection_type == AlertRuleDetectionType.DYNAMIC.value:
                     resp = send_historical_data_to_seer(alert_rule=alert_rule, user=request.user)
-                    if (
-                        resp.status != 200 and resp.status != 202
+                    if resp.status == 202:
+                        http_status = 202
+                    elif (
+                        resp.status != 200
                     ):  # NOTE: send a 202 if we get a "not enough data" warning
                         alert_rule.delete()
                         return Response({"detail": resp.reason}, status=status.HTTP_400_BAD_REQUEST)
@@ -148,17 +151,15 @@ class AlertRuleIndexMixin(Endpoint):
                         duplicate_rule=duplicate_rule,
                         wizard_v3=wizard_v3,
                     )
-                if resp.status == 202:
+                if http_status == 201:
                     return Response(
-                        serialize(alert_rule, request.user), status=status.HTTP_202_ACCEPTED
+                        serialize(alert_rule, request.user), status=status.HTTP_201_CREATED
                     )
                 else:
                     not_enough_data_text = "Fewer than seven days of historical data available"  # TODO: make this a constant somewhere
                     response = Response(
-                        serialize(alert_rule, request.user), status=status.HTTP_201_CREATED
-                    )
-                    response.status_text = (
-                        not_enough_data_text  # we need this to differentiate from the slack 202
+                        {**serialize(alert_rule, request.user), "reason": not_enough_data_text},
+                        status=status.HTTP_202_ACCEPTED,
                     )
                     return response
 
