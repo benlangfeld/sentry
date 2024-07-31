@@ -1,6 +1,7 @@
 import {Component, Fragment} from 'react';
 import styled from '@emotion/styled';
 
+import {Button} from 'sentry/components/button';
 import SelectControl from 'sentry/components/forms/controls/selectControl';
 import {t} from 'sentry/locale';
 import {space} from 'sentry/styles/space';
@@ -25,7 +26,6 @@ import {
 import {AlertRuleComparisonType} from '../metric/types';
 
 import RuleNode from './ruleNode';
-import {Button} from 'sentry/components/button';
 
 type Props = {
   disabled: boolean;
@@ -50,10 +50,10 @@ type Props = {
    */
   placeholder: string;
   project: Project;
+  additionalStaticNode?: React.ReactNode;
   incompatibleBanner?: number | null;
   incompatibleRules?: number[] | null;
   selectType?: 'grouped';
-  additionalStaticNode?: React.ReactNode;
 };
 
 const createSelectOptions = (
