@@ -324,14 +324,14 @@ class AlertRuleCreateEndpointTest(AlertRuleIndexBase):
             "sensitivity": AlertRuleSensitivity.LOW,
             "seasonality": AlertRuleSeasonality.AUTO,
         }
-        mock_seer_request.return_value = HTTPResponse(status=200)
-        day_ago = before_now(days=1).replace(hour=10, minute=0, second=0, microsecond=0)
+        mock_seer_request.return_value = HTTPResponse(status=202)
+        two_days_ago = before_now(days=2).replace(hour=10, minute=0, second=0, microsecond=0)
         with self.options({"issues.group_attributes.send_kafka": True}):
             self.store_event(
                 data={
                     "event_id": "a" * 32,
                     "message": "super duper bad",
-                    "timestamp": iso_format(day_ago + timedelta(minutes=1)),
+                    "timestamp": iso_format(two_days_ago + timedelta(minutes=1)),
                     "fingerprint": ["group1"],
                     "tags": {"sentry:user": self.user.email},
                 },
@@ -342,7 +342,7 @@ class AlertRuleCreateEndpointTest(AlertRuleIndexBase):
                 data={
                     "event_id": "b" * 32,
                     "message": "super bad",
-                    "timestamp": iso_format(day_ago + timedelta(minutes=2)),
+                    "timestamp": iso_format(two_days_ago + timedelta(days=1)),
                     "fingerprint": ["group2"],
                     "tags": {"sentry:user": self.user.email},
                 },
