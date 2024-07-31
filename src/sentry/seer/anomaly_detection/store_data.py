@@ -1,5 +1,5 @@
 import logging
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from django.conf import settings
 from django.utils import timezone
@@ -48,6 +48,21 @@ def format_historical_data(data: SnubaTSResult) -> list[TimeSeriesPoint]:
         ts_point = TimeSeriesPoint(timestamp=datum.get("time"), value=datum.get("count", 0))
         formatted_data.append(ts_point)
     return formatted_data
+
+
+# return the start and end indices
+def get_start_and_end(data: SnubaTSResult) -> tuple[int, int]:
+    start, end = -1, -1
+    indices_with_results = []
+    for i, datum in enumerate(data.data.get("data", [])):
+        if "count" in datum:
+            indices_with_results.append(i)
+    if not indices_with_results:
+        return start, end
+    else:
+        start = indices_with_results[0]
+        end = indices_with_results[-1]
+        return start, end
 
 
 def send_historical_data_to_seer(alert_rule: AlertRule, user: User) -> BaseHTTPResponse:
@@ -137,8 +152,15 @@ def send_historical_data_to_seer(alert_rule: AlertRule, user: User) -> BaseHTTPR
         return base_error_response
 
     MIN_DAYS = 7
-    available_data_days = historical_data.end - historical_data.start
-    if available_data_days < timedelta(days=MIN_DAYS):
+    data_start_index, data_end_index = get_start_and_end(historical_data)
+    if data_start_index == -1:
+        not_enough_data_text = "Fewer than seven days of historical data available"
+        resp.status = 202
+        resp.reason = not_enough_data_text
+
+    data_start_time = datetime.fromtimestamp(historical_data.data.get("data")[data_start_index])
+    data_end_time = datetime.fromtimestamp(historical_data.data.get("data")[data_end_index])
+    if data_end_time - data_start_time < timedelta(days=MIN_DAYS):
         not_enough_data_text = "Fewer than seven days of historical data available"
         resp.status = 202
         resp.reason = not_enough_data_text
